@@ -1,0 +1,35 @@
+### CORE REQUIREMENTS ###
+streamlit==1.36.0
+faiss-cpu== 1.7.4   # Critical - must match your FAISS index version
+protobuf==4.25.3  # Must be <5.0.0 for FAISS compatibility
+numpy==1.26.4  # Must match FAISS build
+pandas==2.2.1
+scikit-learn==1.6.1  # For TF-IDF vectorizer
+joblib==1.4.0  # For model serialization
+
+### FILE HANDLING ###
+pyarrow==16.1.0  # For efficient DataFrame serialization
+Pillow==10.3.0  # Image processing
+requests==2.31.0  # For image downloads
+gdown == 5.2.0  
+lz4>=4.0.0
+
+
+### TRANSITIVE DEPENDENCIES ###
+# explicitly pinned
+# to prevent conflicts in the cloud environment:
+click==8.1.7
+scipy==1.15.2
+Jinja2==3.1.3
+MarkupSafe==2.1.5
+pydeck==0.8.1b0
+tornado==6.4
+typing_extensions==4.11.0
+urllib3==2.2.1
+python-dateutil==2.9.0.post0
+pytz==2024.1
+tzdata==2024.1
+
+### OPTIONAL  ###
+setuptools==69.5.1  # Prevents build issues
+wheel==0.43.0  # For dependency resolution
