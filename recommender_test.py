@@ -140,7 +140,7 @@ class HAMRecommendStreamlit:
             cosine_sim = cosine_similarity(query_vec, self.data['tfidf_matrix'])
             
             # Get top k results (sorted descending)
-            k = 100  # Number of results to return
+            k = 50  # Number of results to return
             top_indices = cosine_sim.argsort()[0][-k:][::-1]  # Indices of top matches
             top_scores = np.sort(cosine_sim[0])[-k:][::-1]    # Corresponding scores
             
@@ -241,7 +241,7 @@ class HAMRecommendStreamlit:
             st.session_state.current_likes.remove(idx)
         if idx in st.session_state.liked_images:
             del st.session_state.liked_images[idx]
-        st.rerun()  # Force immediate update
+       # st.rerun()  # Force immediate update
            
     
     def clear_likes(self):
@@ -249,7 +249,7 @@ class HAMRecommendStreamlit:
         st.session_state.current_likes = []
         st.session_state.liked_images = {}
         st.success("Cleared all current search images!")
-        st.rerun()
+       # st.rerun()
         
     def on_like_change(self, idx):
         """Handle like/unlike actions for current session only"""
