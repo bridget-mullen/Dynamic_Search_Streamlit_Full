@@ -12,16 +12,28 @@ import os
 import gdown
 
 
-_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; HAMSearch/1.0)"}
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://harvardartmuseums.org/",
+}
+
+_image_fetch_errors = []  # module-level list so threads can write to it
 
 def _fetch_image(url):
     """Plain HTTP fetch — safe to call from worker threads (no Streamlit context needed)."""
     try:
-        response = requests.get(url, timeout=12, headers=_HEADERS)
-        if response.status_code == 200:
+        response = requests.get(url, timeout=15, headers=_HEADERS, allow_redirects=True)
+        if response.status_code == 200 and "image" in response.headers.get("Content-Type", ""):
             return BytesIO(response.content).read()
+        # Log non-image or non-200 responses for diagnosis
+        _image_fetch_errors.append(
+            f"HTTP {response.status_code} | Content-Type: {response.headers.get('Content-Type','?')} | {url[:80]}"
+        )
         return None
-    except Exception:
+    except Exception as e:
+        _image_fetch_errors.append(f"Exception: {type(e).__name__}: {e} | {url[:80]}")
         return None
 
 # Set page config
@@ -304,7 +316,11 @@ class HAMRecommendStreamlit:
             st.session_state.batches.append(batch_data)
             st.session_state.last_expanded = len(st.session_state.batches) - 1
         else:
-            st.warning(f"Found {len(indices)} matches but couldn't load any images. The image server may be temporarily unavailable.")
+            sample_errors = _image_fetch_errors[-3:] if _image_fetch_errors else ["no error info captured"]
+            st.warning(
+                f"Found {len(indices)} matches but couldn't load any images.\n\n"
+                f"**Sample errors:** {'; '.join(sample_errors)}"
+            )
     
     def display_ui(self):
         """Display the UI with left sidebar"""
