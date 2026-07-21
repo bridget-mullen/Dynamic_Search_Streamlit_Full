@@ -65,12 +65,12 @@ def load_data():
             raise FileNotFoundError(f"Missing index file: {path}")
         return faiss.read_index(path, faiss.IO_FLAG_MMAP)
 
+    joblib_data = load(GDRIVE_FILES["joblib"][0])
     data = {
         "df": df,
         "image_index": load_index(GDRIVE_FILES["image_index"][0]),
-
-        "tfidf": load(GDRIVE_FILES["joblib"][0])["vectorizer"],
-        "tfidf_matrix": load(GDRIVE_FILES["joblib"][0])['matrix']
+        "tfidf": joblib_data["vectorizer"],
+        "tfidf_matrix": joblib_data['matrix']
       }
     
     return data
@@ -133,34 +133,25 @@ class HAMRecommendStreamlit:
     def search_for_text(self, query):
         """Search for and return similar objects based on text query using cosine similarity"""
         try:
-            # Create query vector
             query_vec = self.data['tfidf'].transform([query])
-            
-            # Calculate cosine similarity against all documents
-            cosine_sim = cosine_similarity(query_vec, self.data['tfidf_matrix'])
-            
-            # Get top k results (sorted descending)
-            k = 50  # Number of results to return
-            top_indices = cosine_sim.argsort()[0][-k:][::-1]  # Indices of top matches
-            top_scores = np.sort(cosine_sim[0])[-k:][::-1]    # Corresponding scores
-            
-            # Filter results (optional - remove if you want all results)
-            new_recommendations = []
-            new_scores = []
-            for idx, score in zip(top_indices, top_scores):
-                if score > 0:  # Only include positive scores
-                    new_recommendations.append(idx)
-                    new_scores.append(score)
-            
-            # Handle results
+
+            # Dot product on sparse matrix — avoids densifying the full matrix
+            scores = (self.data['tfidf_matrix'] @ query_vec.T).toarray().ravel()
+
+            k = 50
+            top_indices = np.argpartition(scores, -k)[-k:]
+            top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
+            top_scores = scores[top_indices]
+
+            new_recommendations = [int(i) for i, s in zip(top_indices, top_scores) if s > 0]
+            new_scores = [float(s) for s in top_scores if s > 0]
+
             if not new_recommendations:
                 st.info(f"No artworks match your query: '{query}'")
-                if st.session_state.batches:
-                    st.session_state.batches = []
             else:
                 self.show_images(new_recommendations, new_scores,
                                batch_name=f"Search Results for: '{query}'")
-                
+
         except Exception as e:
             st.error(f"Search failed: {str(e)}")
                 
