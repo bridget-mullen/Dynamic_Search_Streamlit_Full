@@ -9,7 +9,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import os
-import lz4.frame
 import gdown
 
 
