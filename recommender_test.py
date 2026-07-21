@@ -12,6 +12,17 @@ import os
 import lz4.frame
 import gdown
 
+
+def _fetch_image(url):
+    """Plain HTTP fetch — safe to call from worker threads (no Streamlit context needed)."""
+    try:
+        response = requests.get(url, timeout=8)
+        if response.status_code == 200:
+            return BytesIO(response.content).read()
+        return None
+    except Exception:
+        return None
+
 # Set page config
 
 st.set_page_config(
@@ -105,20 +116,14 @@ class HAMRecommendStreamlit:
         
     @st.cache_data(ttl=3600, show_spinner=False)
     def download_image(_self, url):
-        """Cache individual image downloads"""
-        try:
-            response = requests.get(url, timeout=8)
-            if response.status_code == 200:
-                return BytesIO(response.content).read()
-            return None
-        except:
-            return None
+        """Cached single-image download — call only from the main thread."""
+        return _fetch_image(url)
 
     def download_images_concurrently(self, urls):
         """Download multiple images concurrently using threading"""
         results = {}
         with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_url = {executor.submit(self.download_image, url): url for url in urls}
+            future_to_url = {executor.submit(_fetch_image, url): url for url in urls}
             
             for future in as_completed(future_to_url):
                 url = future_to_url[future]
