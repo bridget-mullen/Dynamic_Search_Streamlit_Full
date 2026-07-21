@@ -13,10 +13,12 @@ import lz4.frame
 import gdown
 
 
+_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; HAMSearch/1.0)"}
+
 def _fetch_image(url):
     """Plain HTTP fetch — safe to call from worker threads (no Streamlit context needed)."""
     try:
-        response = requests.get(url, timeout=8)
+        response = requests.get(url, timeout=12, headers=_HEADERS)
         if response.status_code == 200:
             return BytesIO(response.content).read()
         return None
@@ -302,6 +304,8 @@ class HAMRecommendStreamlit:
         if batch_data["images"]:
             st.session_state.batches.append(batch_data)
             st.session_state.last_expanded = len(st.session_state.batches) - 1
+        else:
+            st.warning(f"Found {len(indices)} matches but couldn't load any images. The image server may be temporarily unavailable.")
     
     def display_ui(self):
         """Display the UI with left sidebar"""
@@ -376,8 +380,9 @@ class HAMRecommendStreamlit:
         with button_col:
             if st.button("🔍 Find Images", key="find_images"):
                 if query:
-                    st.session_state.last_expanded = len(st.session_state.batches)
-                    self.search_for_text(query)
+                    with st.spinner("Searching..."):
+                        st.session_state.last_expanded = len(st.session_state.batches)
+                        self.search_for_text(query)
                 else:
                     st.warning("Please enter search terms")
                     """
