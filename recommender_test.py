@@ -9,6 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import os
+import time
 import gdown
 
 
@@ -19,22 +20,51 @@ _HEADERS = {
     "Referer": "https://harvardartmuseums.org/",
 }
 
-_image_fetch_errors = []  # module-level list so threads can write to it
+HAM_API_KEY = st.secrets.get("HAM_API_KEY", None)
 
-def _fetch_image(url):
-    """Plain HTTP fetch — safe to call from worker threads (no Streamlit context needed)."""
+_image_fetch_errors = []
+
+def _nrs_to_iiif(nrs_url):
+    """Convert an NRS URL to a HAM IIIF thumbnail via the public API if a key is available."""
+    if not HAM_API_KEY:
+        return nrs_url
+    # Extract the URN identifier after "urn-3:HUAM:"
+    match = re.search(r'urn-3:HUAM:(\S+)', nrs_url)
+    if not match:
+        return nrs_url
+    huam_id = match.group(1)
+    api_url = f"https://api.harvardartmuseums.org/object?q=imagepermissionlevel:0&fields=primaryimageurl&keyword={huam_id}&apikey={HAM_API_KEY}"
     try:
-        response = requests.get(url, timeout=15, headers=_HEADERS, allow_redirects=True)
-        if response.status_code == 200 and "image" in response.headers.get("Content-Type", ""):
-            return BytesIO(response.content).read()
-        # Log non-image or non-200 responses for diagnosis
-        _image_fetch_errors.append(
-            f"HTTP {response.status_code} | Content-Type: {response.headers.get('Content-Type','?')} | {url[:80]}"
-        )
-        return None
-    except Exception as e:
-        _image_fetch_errors.append(f"Exception: {type(e).__name__}: {e} | {url[:80]}")
-        return None
+        r = requests.get(api_url, timeout=10)
+        if r.status_code == 200:
+            records = r.json().get("records", [])
+            if records and records[0].get("primaryimageurl"):
+                return records[0]["primaryimageurl"]
+    except Exception:
+        pass
+    return nrs_url
+
+def _fetch_image(url, retries=3):
+    """Fetch an image with retry/backoff on 429. Safe to call from worker threads."""
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=15, headers=_HEADERS, allow_redirects=True)
+            if response.status_code == 200 and "image" in response.headers.get("Content-Type", ""):
+                return BytesIO(response.content).read()
+            if response.status_code == 429:
+                wait = int(response.headers.get("Retry-After", 2 ** attempt))
+                time.sleep(min(wait, 8))
+                continue
+            _image_fetch_errors.append(
+                f"HTTP {response.status_code} | {url[:80]}"
+            )
+            return None
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                _image_fetch_errors.append(f"{type(e).__name__}: {e} | {url[:80]}")
+    return None
 
 # Set page config
 
@@ -135,7 +165,7 @@ class HAMRecommendStreamlit:
     def download_images_concurrently(self, urls):
         """Download multiple images concurrently using threading"""
         results = {}
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_url = {executor.submit(_fetch_image, url): url for url in urls}
             
             for future in as_completed(future_to_url):
